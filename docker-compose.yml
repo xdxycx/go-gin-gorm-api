@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------
+  # 1. 数据库服务 (MySQL 8.0)
+  # ----------------------------------------------------
+  db:
+    image: mysql:8.0
+    container_name: mysql_db
+    restart: always
+    environment:
+      # ⚠️ 生产环境请使用更安全的密码和环境变量管理
+      MYSQL_ROOT_PASSWORD: root_password_secure
+      MYSQL_DATABASE: gin_gorm_db
+      MYSQL_USER: app_user
+      MYSQL_PASSWORD: app_password
+    ports:
+      - "3306:3306" # 映射到宿主机 3306 端口 (可选)
+    volumes:
+      # 持久化存储数据
+      - mysql_data:/var/lib/mysql
+      # 可选：如果你有初始化SQL脚本，可以挂载到这里
+      # - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # ----------------------------------------------------
+  # 2. Go 应用程序服务 (Gin + Gorm)
+  # ----------------------------------------------------
+  app:
+    build:
+      context: . # Dockerfile 位于当前目录
+      dockerfile: Dockerfile
+    container_name: go_gin_app
+    restart: always
+    depends_on:
+      - db # 确保数据库先启动
+    environment:
+      # 应用配置：连接数据库
+      DB_HOST: db        # 使用 service name 作为 host
+      DB_PORT: 3306
+      DB_USER: app_user
+      DB_PASS: app_password
+      DB_NAME: gin_gorm_db
+      APP_PORT: 8080
+    ports:
+      - "7780:8080" # 映射宿主机 80 端口到容器 8080 端口 (Gin 默认监听端口)
+    volumes: []
+      # 用于热重载或查看日志 (可选)
+      # - ./app:/app 
+      # - /app/vendor
+      # {}
+
+# ----------------------------------------------------
+# 3. 命名数据卷定义
+# ----------------------------------------------------
+volumes:
+  mysql_data:
+    driver: local
