@@ -70,6 +70,7 @@ func RegisterService(c *gin.Context) {
 }
 
 // ExecuteService 是动态 SQL 服务的核心执行逻辑，已实现强制类型转换。
+// 【安全修复】此函数现在只允许执行 SELECT 查询操作。非 SELECT 操作将被阻止并仅记录。
 func ExecuteService(c *gin.Context) {
 	reqMethod := c.Request.Method
 	path := c.Param("path")
@@ -111,6 +112,20 @@ func ExecuteService(c *gin.Context) {
 
 	if len(paramKeys) != len(paramTypes) {
 		c.JSON(http.StatusInternalServerError, utils.APIResponse{Code: 500, Message: "服务配置错误：ParamKeys 和 ParamTypes 数量不匹配"})
+		return
+	}
+
+	// 【修改】安全检查：只允许 SELECT 查询操作。非 SELECT 操作将被阻止并仅记录。
+	sqlUpper := strings.ToUpper(strings.TrimSpace(service.SQL))
+	if !strings.HasPrefix(sqlUpper, "SELECT") {
+		log.Printf("Security Alert: Blocked execution of non-SELECT dynamic SQL. Path=%s, Method=%s, SQL=%s", path, reqMethod, service.SQL)
+
+		// 返回成功状态码（HTTP 200），但使用非 0 的业务代码和警告消息，表示操作被安全策略拦截/跳过
+		c.JSON(http.StatusOK, utils.APIResponse{
+			Code:    1, // 使用非 0 状态码表示操作被安全策略拦截/跳过
+			Message: "安全限制: 动态服务只允许执行 SELECT 查询操作。非查询操作已被阻止。",
+			Data:    gin.H{"sql_statement_type": strings.Split(sqlUpper, " ")[0]},
+		})
 		return
 	}
 
@@ -217,18 +232,6 @@ func ExecuteService(c *gin.Context) {
 	// Find() 扫描结果集
 	if err := db.Find(&results).Error != nil {
 		log.Printf("结果扫描失败: %v", err)
-		
-		// 检查是否是成功的非查询操作 (INSERT, UPDATE, DELETE)
-		sqlUpper := strings.ToUpper(service.SQL)
-		if db.RowsAffected > 0 && (strings.HasPrefix(sqlUpper, "INSERT") || strings.HasPrefix(sqlUpper, "UPDATE") || strings.HasPrefix(sqlUpper, "DELETE")) {
-			// 如果是成功的非查询操作，返回受影响的行数
-			c.JSON(http.StatusOK, utils.APIResponse{
-				Code:    0,
-				Message: fmt.Sprintf("SQL 执行成功，影响行数: %d", db.RowsAffected),
-				Data:    gin.H{"rows_affected": db.RowsAffected},
-			})
-			return
-		}
 		
 		c.JSON(http.StatusInternalServerError, utils.APIResponse{
 			Code:    500, 
