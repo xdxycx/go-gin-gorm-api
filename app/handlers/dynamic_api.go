@@ -70,7 +70,7 @@ func RegisterService(c *gin.Context) {
 }
 
 // ExecuteService 是动态 SQL 服务的核心执行逻辑，已实现强制类型转换。
-// 【安全修复】此函数现在只允许执行 SELECT 查询操作。非 SELECT 操作将被阻止并仅记录。
+// 【安全修复】此函数现在只允许执行 SELECT, WITH, EXPLAIN 或 DESCRIBE 查询操作。非查询操作将被阻止并仅记录。
 func ExecuteService(c *gin.Context) {
 	reqMethod := c.Request.Method
 	path := c.Param("path")
@@ -115,15 +115,21 @@ func ExecuteService(c *gin.Context) {
 		return
 	}
 
-	// 【修改】安全检查：只允许 SELECT 查询操作。非 SELECT 操作将被阻止并仅记录。
+	// 【更新】安全检查：只允许 SELECT, WITH, EXPLAIN, DESCRIBE 或 DESC 查询操作。
 	sqlUpper := strings.ToUpper(strings.TrimSpace(service.SQL))
-	if !strings.HasPrefix(sqlUpper, "SELECT") {
-		log.Printf("Security Alert: Blocked execution of non-SELECT dynamic SQL. Path=%s, Method=%s, SQL=%s", path, reqMethod, service.SQL)
+	isSelectQuery := strings.HasPrefix(sqlUpper, "SELECT") || 
+					 strings.HasPrefix(sqlUpper, "WITH") ||
+					 strings.HasPrefix(sqlUpper, "EXPLAIN") ||
+					 strings.HasPrefix(sqlUpper, "DESCRIBE") ||
+					 strings.HasPrefix(sqlUpper, "DESC ") // DESC 必须后面有空格，防止匹配到 DESCRIBE
+	
+	if !isSelectQuery {
+		log.Printf("Security Alert: Blocked execution of non-SELECT/non-WITH/non-EXPLAIN/non-DESC dynamic SQL. Path=%s, Method=%s, SQL=%s", path, reqMethod, service.SQL)
 
 		// 返回成功状态码（HTTP 200），但使用非 0 的业务代码和警告消息，表示操作被安全策略拦截/跳过
 		c.JSON(http.StatusOK, utils.APIResponse{
 			Code:    1, // 使用非 0 状态码表示操作被安全策略拦截/跳过
-			Message: "安全限制: 动态服务只允许执行 SELECT 查询操作。非查询操作已被阻止。",
+			Message: "安全限制: 动态服务只允许执行 SELECT/WITH/EXPLAIN/DESCRIBE/DESC 查询操作。非查询操作已被阻止。",
 			Data:    gin.H{"sql_statement_type": strings.Split(sqlUpper, " ")[0]},
 		})
 		return
