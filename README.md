@@ -30,6 +30,18 @@ SQL 绑定: 每个服务都绑定一个带有 ? 占位符的原始 SQL 语句。
 
 强制类型转换 (ParamTypes): 使用 JSON 数组定义每个参数的预期 Go 类型（如 "int", "string", "float", "bool"）。系统在执行 SQL 前会对参数进行严格的类型转换，确保 SQL 执行的健壮性。
 
+严格查询限制（安全策略）:
+为了保护数据库安全，动态服务仅允许执行只读的查询和诊断操作。任何修改数据库状态的语句（如 INSERT, UPDATE, DELETE, DROP 等）都会被系统拦截并记录日志，而不会执行。
+允许的语句前缀 (不区分大小写):
+
+SELECT (标准查询)
+
+WITH (CTE，复杂查询)
+
+EXPLAIN (查询执行计划诊断)
+
+DESCRIBE / DESC (查看表结构)
+
 III. 环境搭建与启动 (Setup and Startup)
 
 项目推荐使用 Docker Compose 进行快速、完整的环境搭建。
@@ -183,24 +195,25 @@ POST
 
 响应: {"code": 0, "message": "查询成功", "data": [...]}
 
-示例 2: 执行 POST 写入操作 (使用 JSON Body 参数)
+示例 2: 尝试执行被禁用的写入操作
 
-假设注册了一个更新用户名的服务：
+假设尝试注册一个 UPDATE 服务并调用它。
 
-{
-  "name": "UpdateUsernameDynamic",
-  "method": "POST",
-  "path": "/update_user_name",
-  "sql": "UPDATE users SET username = ? WHERE id = ?",
-  "param_keys": "[\"new_name\", \"user_id\"]",
-  "param_types": "[\"string\", \"int\"]" 
-}
-
+注册 SQL: "UPDATE users SET username = ? WHERE id = ?"
 
 请求: POST http://localhost:8080/api/v1/dynamic/update_user_name
 
 请求体: {"user_id": 2, "new_name": "Alice_Updated"}
 
-注意: 即使请求体中的顺序是 user_id 在前，但系统会严格按照 ParamKeys ("new_name", "user_id") 的顺序将参数 Alice_Updated 和 2 绑定到 SQL 的 ? 占位符上。
+响应 (操作被阻止):
 
-响应: {"code": 0, "message": "SQL 执行成功，影响行数: 1", "data": {"rows_affected": 1}} (因为是非查询操作)
+{
+  "code": 1, 
+  "message": "安全限制: 动态服务只允许执行 [SELECT WITH EXPLAIN DESCRIBE DESC ] 查询操作。非查询操作已被阻止。",
+  "data": {
+    "sql_statement_type": "UPDATE"
+  }
+}
+
+
+(注意：系统返回 HTTP 200，但业务代码 code: 1 和明确的消息表明操作已被安全策略拦截，未执行。)
