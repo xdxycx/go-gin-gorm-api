@@ -27,9 +27,13 @@ type APIService struct {
 	// 注意: 必须使用 ? 作为参数占位符，并在请求中传递参数值。
 	SQL string `gorm:"not null" json:"sql" binding:"required"`
 	
-	// 【新增】ParamKeys 是一个 JSON 数组字符串，定义了 SQL 占位符对应参数的 key 及其顺序。
-	// 示例: '["user_id", "username"]'。顺序必须与 SQL 中的 ? 占位符顺序一致，用于保证参数绑定正确。
+	// ParamKeys 是一个 JSON 数组字符串，定义了 SQL 占位符对应参数的 key 及其顺序。
+	// 示例: '["user_id", "username"]'。顺序必须与 SQL 中的 ? 占位符顺序一致。
 	ParamKeys string `gorm:"type:text" json:"param_keys"`
+
+	// 【新增】ParamTypes 是一个 JSON 数组字符串，定义了 ParamKeys 中每个参数的预期类型。
+	// 示例: '["int", "string", "float", "bool"]'。顺序必须与 ParamKeys 严格一致。
+	ParamTypes string `gorm:"type:text" json:"param_types"`
 }
 
 // TableName 指定表名为 'api_services'
