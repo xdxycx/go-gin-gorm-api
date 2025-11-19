@@ -17,15 +17,19 @@ type APIService struct {
 	// Name 是服务的友好名称
 	Name string `gorm:"unique;not null" json:"name" binding:"required"`
 	
-	// Method 是 HTTP 方法 (例如: GET, POST)
-	Method string `gorm:"not null" json:"method" binding:"required,oneof=GET POST"`
+	// Method 是 HTTP 方法 (例如: GET, POST, PUT)
+	Method string `gorm:"not null" json:"method" binding:"required,oneof=GET POST PUT DELETE"`
 	
-	// Path 是服务的 URL 路径 (例如: /api/v1/report)
+	// Path 是服务的 URL 路径 (例如: /api/v1/dynamic/report)
 	Path string `gorm:"unique;not null" json:"path" binding:"required"`
 	
 	// SQL 是要执行的原始 SQL 语句
-	// 注意: 实际项目中应加入参数校验和安全措施防止 SQL 注入
+	// 注意: 必须使用 ? 作为参数占位符，并在请求中传递参数值。
 	SQL string `gorm:"not null" json:"sql" binding:"required"`
+	
+	// 【新增】ParamKeys 是一个 JSON 数组字符串，定义了 SQL 占位符对应参数的 key 及其顺序。
+	// 示例: '["user_id", "username"]'。顺序必须与 SQL 中的 ? 占位符顺序一致，用于保证参数绑定正确。
+	ParamKeys string `gorm:"type:text" json:"param_keys"`
 }
 
 // TableName 指定表名为 'api_services'
