@@ -16,6 +16,22 @@ import (
 	"gorm.io/gorm"
 )
 
+// allowedQueryPrefixes 定义了允许通过动态服务执行的只读查询语句前缀。
+// 仅允许 SELECT, WITH, EXPLAIN 和 DESCRIBE/DESC 等不会修改数据库状态的语句。
+var allowedQueryPrefixes = []string{"SELECT", "WITH", "EXPLAIN", "DESCRIBE", "DESC "}
+
+// isAllowedQuery 检查 SQL 语句是否以允许的只读前缀开始。
+func isAllowedQuery(sql string) bool {
+	sqlUpper := strings.ToUpper(strings.TrimSpace(sql))
+	for _, prefix := range allowedQueryPrefixes {
+		if strings.HasPrefix(sqlUpper, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+
 // RegisterService 处理动态服务注册请求。
 // 此函数现在接收并存储 ParamTypes 字段，并检查 ParamKeys 与 ParamTypes 数量的一致性。
 func RegisterService(c *gin.Context) {
@@ -70,7 +86,7 @@ func RegisterService(c *gin.Context) {
 }
 
 // ExecuteService 是动态 SQL 服务的核心执行逻辑，已实现强制类型转换。
-// 【安全修复】此函数现在只允许执行 SELECT, WITH, EXPLAIN 或 DESCRIBE 查询操作。非查询操作将被阻止并仅记录。
+// 【安全修复】此函数现在只允许执行预定义的只读查询操作。非查询操作将被阻止并仅记录。
 func ExecuteService(c *gin.Context) {
 	reqMethod := c.Request.Method
 	path := c.Param("path")
@@ -115,21 +131,16 @@ func ExecuteService(c *gin.Context) {
 		return
 	}
 
-	// 【更新】安全检查：只允许 SELECT, WITH, EXPLAIN, DESCRIBE 或 DESC 查询操作。
-	sqlUpper := strings.ToUpper(strings.TrimSpace(service.SQL))
-	isSelectQuery := strings.HasPrefix(sqlUpper, "SELECT") || 
-					 strings.HasPrefix(sqlUpper, "WITH") ||
-					 strings.HasPrefix(sqlUpper, "EXPLAIN") ||
-					 strings.HasPrefix(sqlUpper, "DESCRIBE") ||
-					 strings.HasPrefix(sqlUpper, "DESC ") // DESC 必须后面有空格，防止匹配到 DESCRIBE
-	
-	if !isSelectQuery {
-		log.Printf("Security Alert: Blocked execution of non-SELECT/non-WITH/non-EXPLAIN/non-DESC dynamic SQL. Path=%s, Method=%s, SQL=%s", path, reqMethod, service.SQL)
+	// 【安全检查】使用辅助函数检查是否为允许的只读查询
+	if !isAllowedQuery(service.SQL) {
+		sqlUpper := strings.ToUpper(strings.TrimSpace(service.SQL))
+		
+		log.Printf("Security Alert: Blocked execution of write/unauthorized dynamic SQL. Path=%s, Method=%s, SQL=%s", path, reqMethod, service.SQL)
 
 		// 返回成功状态码（HTTP 200），但使用非 0 的业务代码和警告消息，表示操作被安全策略拦截/跳过
 		c.JSON(http.StatusOK, utils.APIResponse{
 			Code:    1, // 使用非 0 状态码表示操作被安全策略拦截/跳过
-			Message: "安全限制: 动态服务只允许执行 SELECT/WITH/EXPLAIN/DESCRIBE/DESC 查询操作。非查询操作已被阻止。",
+			Message: fmt.Sprintf("安全限制: 动态服务只允许执行 %v 查询操作。非查询操作已被阻止。", allowedQueryPrefixes),
 			Data:    gin.H{"sql_statement_type": strings.Split(sqlUpper, " ")[0]},
 		})
 		return
@@ -150,8 +161,8 @@ func ExecuteService(c *gin.Context) {
 		// POST/PUT/DELETE 请求：从 JSON body 中获取参数
 		if len(paramKeys) > 0 {
 			if err := c.ShouldBindJSON(&rawParams); err != nil {
-				// 如果绑定失败，可能是 body 为空，或格式错误
-				if !errors.Is(err, errors.New("EOF")) { // 忽略 EOF 错误，表示可能没有 body
+				// 忽略 EOF 错误，表示请求体为空，但这通常意味着参数缺失，后续检查会捕获
+				if !errors.Is(err, errors.New("EOF")) { 
 					c.JSON(http.StatusBadRequest, utils.APIResponse{Code: 400, Message: "请求体解析失败或格式错误", Data: gin.H{"detail": err.Error()}})
 					return
 				}
@@ -178,12 +189,13 @@ func ExecuteService(c *gin.Context) {
 		switch v := rawValue.(type) {
 		case string:
 			strValue = v
-		case float64: // JSON 中的数字默认为 float64
-			// 使用 'f' 格式和 -1 精度以避免科学计数法，并保持原始数字的全部精度
+		case float64: // JSON 解析数字默认是 float64
+			// 转换为字符串时，使用 -1 精度，以确保保留原始数字的所有有效位，避免科学计数法或精度丢失。
 			strValue = strconv.FormatFloat(v, 'f', -1, 64) 
 		case bool:
 			strValue = strconv.FormatBool(v)
 		default:
+			// 兜底：尝试将其他类型转换为字符串
 			strValue = fmt.Sprintf("%v", v)
 		}
 		
@@ -199,7 +211,7 @@ func ExecuteService(c *gin.Context) {
 			convertedValue = v
 		case "bool":
 			var v bool
-			// ParseBool 接受 1, 0, t, f, T, F, true, false, TRUE, FALSE
+			// ParseBool 接受多种格式 (t, f, 1, 0, true, false)
 			v, err = strconv.ParseBool(strValue)
 			convertedValue = v
 		case "string":
@@ -235,7 +247,7 @@ func ExecuteService(c *gin.Context) {
 		return
 	}
 
-	// Find() 扫描结果集
+	// Find() 扫描结果集。对于 SELECT, WITH, EXPLAIN, DESCRIBE 等语句，都会返回结果集。
 	if err := db.Find(&results).Error != nil {
 		log.Printf("结果扫描失败: %v", err)
 		
@@ -247,7 +259,7 @@ func ExecuteService(c *gin.Context) {
 		return
 	}
 	
-	// 对于 SELECT 语句，返回查询结果
+	// 返回查询结果
 	c.JSON(http.StatusOK, utils.APIResponse{
 		Code:    0,
 		Message: "查询成功",
