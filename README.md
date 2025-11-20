@@ -264,28 +264,8 @@ POST
 
 
 (注意：系统返回 HTTP 200，但业务代码 code: 1 和明确的消息表明操作已被安全策略拦截，未执行。)
-
-**Deployment & Scripts**
-
-- `DEPLOY.md`: 详尽的部署指南，位于仓库根目录，包含基于 `docker-compose` 的启动、验证与停止步骤。
-- `scripts/start.sh`: 启动 helper，会在缺少 `.env` 时从 `.env.example` 复制一份并使用 `docker-compose` 启动服务，同时跟随 `app` 日志。
-- `scripts/stop.sh`: 停止并清理容器/镜像/卷的辅助脚本。
-- `scripts/status.sh`: 快速展示 `docker-compose ps`、最近的 `app` 日志与宿主端口映射信息。
-
-示例用法：
-
-```bash
-# 复制并编辑 .env（仅第一次或需要修改时）
-cp .env.example .env
-# 启动（脚本会跟随日志）
-./scripts/start.sh
-# 停止并清理
-./scripts/stop.sh
-# 查看当前状态与日志摘要
-./scripts/status.sh
-```
-
-建议：将 `DEPLOY.md` 与这些脚本作为本地开发与 CI 快速验证的参考；在生产环境中使用更成熟的秘密管理与部署机制（例如 Kubernetes + Secrets / HashiCorp Vault）。
+ 
+**部署说明**：有关部署步骤与本地 helper 脚本，请参阅仓库根目录的 `DEPLOY_EXTENDED.md`（包含 `scripts/start.sh`、`scripts/stop.sh`、`scripts/status.sh` 的使用示例）。
 Go Gin Gorm 动态 API 项目手册
 
 I. 项目简介 (Project Introduction)
