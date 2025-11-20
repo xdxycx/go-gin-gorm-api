@@ -78,6 +78,15 @@ docker-compose up --build -d
 curl http://localhost:8080/
 # 预期输出: {"message":"Welcome to Go Gin Gorm API"}
 
+C. 配置项与环境变量（运行时）
+
+项目的一些运行时行为可通过环境变量配置，推荐在 `docker-compose.yml` 或 `.env` 中设置：
+
+- `DYNAMIC_MAX_ROWS`：执行返回的最大行数，默认值 `1000`。当查询结果超过该值时，API 会截断返回并在响应中标注 `truncated`。示例：`DYNAMIC_MAX_ROWS=500`
+- `DYNAMIC_QUERY_TIMEOUT_SECONDS`：动态 SQL 执行的超时时间（秒），默认值 `5`。超过该时间查询将被取消并返回业务码 `2`（超时）。示例：`DYNAMIC_QUERY_TIMEOUT_SECONDS=10`
+
+审计日志说明：动态 SQL 的每次执行都会生成一条持久化审计记录（表名 `audits`），记录 `path`, `method`, `client_ip`, `sql`, `args`, `duration_ms`, `rows`, `truncated` 等字段。审计表由应用在启动时通过 GORM 的 `AutoMigrate` 自动创建。
+
 
 IV. API 接口参考 (API Reference)
 

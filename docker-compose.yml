@@ -19,6 +19,9 @@ services:
       - MYSQL_HOST=mysql
       - MYSQL_PORT=3306
       - PORT=8080
+      # 动态 SQL 配置
+      - DYNAMIC_MAX_ROWS=${DYNAMIC_MAX_ROWS:-1000}
+      - DYNAMIC_QUERY_TIMEOUT_SECONDS=${DYNAMIC_QUERY_TIMEOUT_SECONDS:-5}
     # 端口映射 (将容器 8080 映射到宿主机 8080)
     ports:
       - "8080:8080"
