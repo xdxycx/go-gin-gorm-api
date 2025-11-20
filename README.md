@@ -497,7 +497,7 @@ POST
 
 假设已注册上述 GetUserByIdDynamic 服务。
 
-请求: GET http://localhost:8080/api/v1/dynamic/user_by_id?user_id=1
+请求: GET http://localhost:8080/api/v1/dynamic/run/user_by_id?user_id=1
 
 参数: user_id (作为字符串 "1" 传入)
 
@@ -511,7 +511,7 @@ POST
 
 注册 SQL: "UPDATE users SET username = ? WHERE id = ?"
 
-请求: POST http://localhost:8080/api/v1/dynamic/update_user_name
+请求: POST http://localhost:8080/api/v1/dynamic/run/update_user_name
 
 请求体: {"user_id": 2, "new_name": "Alice_Updated"}
 
