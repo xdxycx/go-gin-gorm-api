@@ -49,10 +49,11 @@ func InitRouter() *gin.Engine {
 			// POST /api/v1/dynamic/register 用于注册新的动态服务
 			dynamic.POST("/register", handlers.RegisterService)
 			
-			// 【修改】使用 Any() 和通配符 *path 捕获 /api/v1/dynamic/ 之后的任何路径和任何 HTTP 方法
-			// 匹配的路径将传递给 ExecuteService，ExecuteService 根据 Path 和 Method 查找对应的 SQL 服务
-			log.Println("注册动态服务执行路由 /api/v1/dynamic/*path") // 【修改】增加日志
-			dynamic.Any("/*path", handlers.ExecuteService) // 【修改】路由调整为 Any("/*path")
+			// 避免与管理路由冲突，将执行路由放在 /run/*path 下
+			// 管理路由: POST /api/v1/dynamic/register
+			// 执行路由:  /api/v1/dynamic/run/*path
+			log.Println("注册动态服务执行路由 /api/v1/dynamic/run/*path")
+			dynamic.Any("/run/*path", handlers.ExecuteService)
 		}
 	}
 

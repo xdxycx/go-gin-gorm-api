@@ -15,7 +15,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 
 # --- runtime stage ---
 FROM alpine:latest
-RUN apk --no-cache add ca-certificates
+# 安装证书并提供 wget 用于 HEALTHCHECK
+RUN apk --no-cache add ca-certificates wget
 # 创建非 root 用户
 RUN addgroup -S app && adduser -S -G app app
 WORKDIR /app

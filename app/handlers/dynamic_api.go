@@ -248,12 +248,12 @@ func ExecuteService(c *gin.Context) {
 	}
 
 	// Find() 扫描结果集。对于 SELECT, WITH, EXPLAIN, DESCRIBE 等语句，都会返回结果集。
-	if err := db.Find(&results).Error != nil {
+	if err := db.Find(&results).Error; err != nil {
 		log.Printf("结果扫描失败: %v", err)
-		
+
 		c.JSON(http.StatusInternalServerError, utils.APIResponse{
-			Code:    500, 
-			Message: "结果处理失败。", 
+			Code:    500,
+			Message: "结果处理失败。",
 			Data:    gin.H{"detail": err.Error()},
 		})
 		return
