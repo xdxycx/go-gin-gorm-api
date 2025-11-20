@@ -79,6 +79,39 @@ curl http://localhost:8080/
 # 预期输出: {"message":"Welcome to Go Gin Gorm API"}
 
 C. 配置项与环境变量（运行时）
+D. 使用 `.env` 与 Docker Compose 部署（示例）
+
+1. 复制示例环境文件并编辑实际值：
+
+```bash
+cp .env.example .env
+# 编辑 .env，填写数据库密码等敏感信息
+```
+
+2. 使用 `docker-compose` 启动（推荐，包含构建步骤）：
+
+```bash
+# 使用默认 .env 文件
+docker-compose --env-file .env up --build -d
+
+# 查看日志，确认服务与数据库启动完成
+docker-compose logs -f app
+
+# 停止并移除容器
+docker-compose down
+```
+
+3. 覆盖环境变量示例：
+
+```bash
+# 以临时变量覆盖并启动
+DYNAMIC_MAX_ROWS=500 DYNAMIC_QUERY_TIMEOUT_SECONDS=10 docker-compose --env-file .env up --build -d
+```
+
+说明:
+- `.env.example` 包含运行所需的环境变量示例（包括 `DYNAMIC_MAX_ROWS` 和 `DYNAMIC_QUERY_TIMEOUT_SECONDS` 的默认值）。
+- 在生产环境中，尽量通过 CI/CD secret 或 Docker secrets 管理敏感配置，不要把生产密码提交到仓库。
+
 
 项目的一些运行时行为可通过环境变量配置，推荐在 `docker-compose.yml` 或 `.env` 中设置：
 
