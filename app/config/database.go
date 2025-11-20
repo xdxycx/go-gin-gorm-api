@@ -51,6 +51,7 @@ func InitDatabase(cfg DBConfig) { // 接收 DBConfig 接口
 	err = DB.AutoMigrate(
 		&models.User{},
 		&models.APIService{},
+		&models.Audit{},
 	)
 	if err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)

@@ -21,6 +21,13 @@
 - 参数与类型: 在 `app/handlers/dynamic_api.go` 中，服务在执行前会把请求参数按 `ParamKeys` 顺序读取并用 `ParamTypes` 做严格转换（支持 `int|int64`, `float|float64`, `bool`, `string`）。不要绕过或更改该转换逻辑，除非同时更新注册与文档。
 - 安全限制: 动态服务只允许只读查询。允许前缀在 `app/handlers/dynamic_api.go` 的 `allowedQueryPrefixes` 中定义（默认 `SELECT, WITH, EXPLAIN, DESCRIBE, DESC`）。非允许语句会被拦截——返回 HTTP 200 但业务 `Code` 非 0，且不会执行写操作。任何更改都需要非常谨慎并注明安全理由。
 
+配置项（环境变量）
+- `DYNAMIC_MAX_ROWS`：执行返回的最大行数（默认 `1000`）。超过此限制时结果会被截断并在响应中标注。示例：`DYNAMIC_MAX_ROWS=500`
+- `DYNAMIC_QUERY_TIMEOUT_SECONDS`：查询执行的超时时间（秒，默认 `5`）。超过该时间查询会被取消并返回业务码 `2`。示例：`DYNAMIC_QUERY_TIMEOUT_SECONDS=10`
+
+审计日志
+- 动态 SQL 执行会生成持久化审计记录（模型在 `app/models/audit.go`，表名 `audits`），记录字段包括 `path`, `method`, `client_ip`, `sql`, `args`, `duration_ms`, `rows`, `truncated`。审计记录在 `app/config/database.go` 的 `AutoMigrate` 中自动创建。
+
 常见任务示例
 - 注册动态服务（示例请求体）:
   {

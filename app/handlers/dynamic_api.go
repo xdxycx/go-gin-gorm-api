@@ -1,13 +1,16 @@
 package handlers
 
 import (
-	"encoding/json" 
-	"errors"        
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
-	"strconv" 
+	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go-gin-gorm-api/app/config"
@@ -232,25 +235,51 @@ func ExecuteService(c *gin.Context) {
 	
 	log.Printf("执行动态服务: Path=%s, Method=%s, SQL=%s, 参数=%v", path, reqMethod, service.SQL, args)
 
-	// 5. 执行 SQL 并扫描结果
+	// 5. 执行 SQL 并扫描结果（带超时与行数限制），并写入审计表
 	var results []map[string]interface{}
-	// GORM Raw() 方法将确保 args 列表中的参数按顺序绑定到 SQL 语句中的 '?' 占位符
-	db := config.DB.Raw(service.SQL, args...) 
-	
+
+	// 从环境变量读取可配置项，提供默认值
+	maxRows := 1000
+	if v := os.Getenv("DYNAMIC_MAX_ROWS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxRows = n
+		}
+	}
+
+	timeoutSec := 5
+	if v := os.Getenv("DYNAMIC_QUERY_TIMEOUT_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			timeoutSec = n
+		}
+	}
+
+	queryTimeout := time.Duration(timeoutSec) * time.Second
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), queryTimeout)
+	defer cancel()
+
+	start := time.Now()
+
+	// 使用带上下文的 DB 执行查询
+	db := config.DB.WithContext(ctx).Raw(service.SQL, args...)
 	if db.Error != nil {
 		log.Printf("SQL 执行失败: %v", db.Error)
 		c.JSON(http.StatusInternalServerError, utils.APIResponse{
 			Code:    500,
-			Message: "SQL 执行失败，请检查 SQL 语句、ParamKeys 和 ParamTypes 配置。", 
+			Message: "SQL 执行失败，请检查 SQL 语句、ParamKeys 和 ParamTypes 配置。",
 			Data:    gin.H{"detail": db.Error.Error()},
 		})
 		return
 	}
 
-	// Find() 扫描结果集。对于 SELECT, WITH, EXPLAIN, DESCRIBE 等语句，都会返回结果集。
 	if err := db.Find(&results).Error; err != nil {
-		log.Printf("结果扫描失败: %v", err)
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("SQL 执行超时: Path=%s, Method=%s, SQL=%s, err=%v", path, reqMethod, service.SQL, err)
+			c.JSON(http.StatusOK, utils.APIResponse{Code: 2, Message: "查询超时，已取消执行"})
+			return
+		}
 
+		log.Printf("结果扫描失败: %v", err)
 		c.JSON(http.StatusInternalServerError, utils.APIResponse{
 			Code:    500,
 			Message: "结果处理失败。",
@@ -258,11 +287,36 @@ func ExecuteService(c *gin.Context) {
 		})
 		return
 	}
-	
-	// 返回查询结果
-	c.JSON(http.StatusOK, utils.APIResponse{
-		Code:    0,
-		Message: "查询成功",
-		Data:    results,
-	})
+
+	duration := time.Since(start)
+	truncated := false
+	rows := len(results)
+	if rows > maxRows {
+		results = results[:maxRows]
+		truncated = true
+	}
+
+	// 持久化审计记录
+	argsBytes, _ := json.Marshal(args)
+	audit := models.Audit{
+		Path:       path,
+		Method:     reqMethod,
+		ClientIP:   c.ClientIP(),
+		SQL:        service.SQL,
+		Args:       string(argsBytes),
+		DurationMs: duration.Milliseconds(),
+		Rows:       rows,
+		Truncated:  truncated,
+	}
+	if err := config.DB.Create(&audit).Error; err != nil {
+		log.Printf("AUDIT WRITE FAILED: %v", err)
+	}
+
+	// 返回查询结果（包含截断提示）
+	resp := utils.APIResponse{Code: 0, Message: "查询成功", Data: results}
+	if truncated {
+		resp.Message = "查询成功（结果已被限制为最大行数）"
+		resp.Data = gin.H{"rows_returned": len(results), "truncated": true, "data": results}
+	}
+	c.JSON(http.StatusOK, resp)
 }
